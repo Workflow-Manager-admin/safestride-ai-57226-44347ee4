@@ -227,6 +227,95 @@ function FeedbackModal({ open, onClose }) {
   );
 }
 
+/* === Toggle Section for Map Overlays (Crime, Lighting, Crowds, Weather) === */
+function OverlayToggles({
+  showCrime, setShowCrime,
+  showLighting, setShowLighting,
+  showCrowds, setShowCrowds,
+  showWeather, setShowWeather
+}) {
+  return (
+    <div style={{
+      background: "#fff",
+      borderRadius: 10,
+      padding: "15px 16px 10px",
+      boxShadow: "0 2px 15px #1922",
+      margin: "14px 0 24px 0",
+      fontSize: "1.07em",
+    }}>
+      <div style={{ fontWeight: 700, marginBottom: 8, color: "#222" }}>Map Layers</div>
+      <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+        <label style={{ display: "flex", alignItems: "center", gap: 10 }}>
+          <input type="checkbox" checked={showCrime} onChange={e => setShowCrime(e.target.checked)} />
+          <span style={{ color: "#e02451", fontWeight: 600 }}>Crime Zones</span>
+        </label>
+        <label style={{ display: "flex", alignItems: "center", gap: 10 }}>
+          <input type="checkbox" checked={showLighting} onChange={e => setShowLighting(e.target.checked)} />
+          <span style={{ color: "#FFD600", fontWeight: 600 }}>Lighting (Demo)</span>
+        </label>
+        <label style={{ display: "flex", alignItems: "center", gap: 10 }}>
+          <input type="checkbox" checked={showCrowds} onChange={e => setShowCrowds(e.target.checked)} />
+          <span style={{ color: "#0091EA", fontWeight: 600 }}>Crowd Density (Demo)</span>
+        </label>
+        <label style={{ display: "flex", alignItems: "center", gap: 10 }}>
+          <input type="checkbox" checked={showWeather} onChange={e => setShowWeather(e.target.checked)} />
+          <span style={{ color: "#4CAF50", fontWeight: 600 }}>Weather</span>
+        </label>
+      </div>
+    </div>
+  );
+}
+
+/* === Legend for Overlay Colors/Icons === */
+function MapLegend() {
+  return (
+    <div style={{
+      marginTop: 10,
+      borderRadius: 9,
+      background: "#fcfcfc",
+      border: "1.5px solid #d6d6d8",
+      boxShadow: "0 2px 12px #0d0f0f11",
+      padding: "10px 15px 10px",
+      fontSize: "1.01em",
+      maxWidth: 320,
+      color: "#222b"
+    }}>
+      <div style={{ fontWeight: 700, paddingBottom: 5, letterSpacing: ".04em" }}>Legend</div>
+      <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 5 }}>
+        <span style={{
+          display: "inline-block",
+          width: 20, height: 11, borderRadius: 5,
+          background: "#e02451", border: "1px solid #e02451", verticalAlign: "middle"
+        }} /> Crime Zone
+      </div>
+      <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 5 }}>
+        <span style={{
+          display: "inline-block",
+          width: 20, height: 11, borderRadius: 5,
+          background: "#FFD600", border: "1px solid #FFD600", verticalAlign: "middle"
+        }} /> Well-Lit Area (Demo)
+      </div>
+      <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 5 }}>
+        <span style={{
+          display: "inline-block",
+          width: 20, height: 11, borderRadius: 5,
+          background: "#0091EA", border: "1px solid #0091EA", verticalAlign: "middle"
+        }} /> Crowd Density (High) (Demo)
+      </div>
+      <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+        <span style={{
+          display: "inline-block",
+          width: 20, height: 5, borderRadius: 3,
+          background: "#19b96c", border: "1.5px solid #19b96c"
+        }} />
+        <span>Safer Route</span>
+        <span style={{ display: "inline-block", marginLeft: 10, width: 20, height: 5, borderRadius: 3, background: "#ec2323", border: "1.5px solid #ec2323" }} />
+        <span>Riskier Route</span>
+      </div>
+    </div>
+  );
+}
+
 // ...Other modal/component stubs, unchanged...
 
 function ReportUnsafeSpotModal({ open, onClose, onSubmit, location }) {
