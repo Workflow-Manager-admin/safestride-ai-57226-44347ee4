@@ -3,20 +3,26 @@ import "./App.css";
 
 // -- Google Maps Loader --
 function loadGoogleMapsScript(apiKey, callback) {
+  // Loads the Google Maps JS API and invokes callback only when ready; handles multiple calls gracefully.
   if (window.google && window.google.maps) {
     callback();
     return;
   }
   const scriptId = "google-maps-script";
-  if (document.getElementById(scriptId)) {
-    document.getElementById(scriptId).addEventListener("load", callback);
+  const existing = document.getElementById(scriptId);
+  if (existing) {
+    existing.addEventListener("load", callback);
     return;
   }
   const script = document.createElement("script");
   script.id = scriptId;
   script.src = `https://maps.googleapis.com/maps/api/js?key=${apiKey}&libraries=places`;
   script.async = true;
-  script.onload = callback;
+  script.onerror = () => callback(new Error("Google Maps script failed to load."));
+  script.onload = () => {
+    script.removeEventListener("load", callback); // Avoid dup calls
+    callback();
+  };
   document.body.appendChild(script);
 }
 
@@ -33,7 +39,7 @@ function App() {
   // -- Google Maps API Key (Demo Only) --
   const GOOGLE_MAPS_API_KEY = "AIzaSyCztCqCWGgNNh1xnr_Ey91rJGJC4ZC5VNY"; // Demo/test/public browser key.
 
-  // ========== Core React State: Feature Toggles and User Demo Settings ==========
+  // ========== Core React State: Feature Toggles, User Demo Settings, and Map/Location ==========
   const [showCrime, setShowCrime] = useState(true);
   const [showLighting, setShowLighting] = useState(true);
   const [showCrowds, setShowCrowds] = useState(true);
@@ -48,6 +54,11 @@ function App() {
   const [mapLoaded, setMapLoaded] = useState(false);
   const [weather, setWeather] = useState(null);
   const [notification, setNotification] = useState(null);
+
+  // Google Maps/geolocation improvement state
+  const [geo, setGeo] = useState({ status: "loading", coords: null, error: null });
+  // status: 'loading' | 'success' | 'error'
+  const [userMarker, setUserMarker] = useState(null);
 
   // Map Refs
   const mapRef = useRef();
@@ -66,17 +77,60 @@ function App() {
     root.style.setProperty("--text-color", "#222222");
     root.style.setProperty("--text-secondary", "rgba(34,34,34,0.7)");
     root.style.setProperty("--border-color", "rgba(34,34,34,0.075)");
-    loadGoogleMapsScript(GOOGLE_MAPS_API_KEY, () => setMapLoaded(true));
+    loadGoogleMapsScript(GOOGLE_MAPS_API_KEY, (err) => {
+      if (err) {
+        setMapLoaded(false);
+        setGeo({ status: "error", coords: null, error: "Google Maps failed to load." });
+      } else {
+        setMapLoaded(true);
+      }
+    });
   }, []);
 
-  // (B) One-Time Map Initialization After Load
+  // (A.1) Request browser geolocation ONCE after mount & map lib loaded
+  useEffect(() => {
+    if (!mapLoaded) return;
+    if (!navigator.geolocation) {
+      setGeo({
+        status: "error",
+        coords: null,
+        error: "Geolocation is not supported by your browser.",
+      });
+      return;
+    }
+    setGeo({ status: "loading", coords: null, error: null });
+    // timeout 12s, high accuracy off (faster startup)
+    navigator.geolocation.getCurrentPosition(
+      (pos) => {
+        setGeo({ status: "success", coords: { lat: pos.coords.latitude, lng: pos.coords.longitude }, error: null });
+      },
+      (err) => {
+        // Permission denied, unavailable, timeout
+        setGeo({
+          status: "error",
+          coords: null,
+          error: err.code === 1
+            ? "Location permission denied by user. Showing default city."
+            : "Unable to access current location. Showing default city.",
+        });
+      },
+      { enableHighAccuracy: false, timeout: 12000, maximumAge: 15000 }
+    );
+  }, [mapLoaded]);
+
+  // (B) One-Time Map Initialization After Load and Geolocation
   useEffect(() => {
     if (!mapLoaded) return;
     if (!mapCanvasRef.current) return;
     if (mapRef.current) return; // already initialized
 
-    // Initial center (New York City)
-    const initialCoords = { lat: 40.7445, lng: -73.9906 };
+    // Center: Use geolocated coords if available (async), else default to fallback
+    const fallbackCoords = { lat: 40.7445, lng: -73.9906 }; // New York City
+    const initialCoords =
+      geo.status === "success" && geo.coords
+        ? geo.coords
+        : fallbackCoords;
+
     const mapToUse = new window.google.maps.Map(mapCanvasRef.current, {
       center: initialCoords,
       zoom: 14.1,
@@ -92,9 +146,76 @@ function App() {
     mapRef.current = mapToUse;
     window.mapInstance = mapToUse; // for debugging
 
+    // Place user's marker (if geolocation available)
+    if (geo.status === "success" && geo.coords) {
+      const marker = new window.google.maps.Marker({
+        position: geo.coords,
+        map: mapToUse,
+        title: "Your Location",
+        label: { text: "You", color: "#E91E63", fontWeight: "bold" },
+        icon: {
+          path: window.google.maps.SymbolPath.CIRCLE,
+          fillColor: "#2196f3",
+          fillOpacity: 0.9,
+          strokeColor: "#fff",
+          strokeWeight: 3,
+          scale: 10,
+        },
+      });
+      setUserMarker(marker);
+    } else if (userMarker) {
+      userMarker.setMap(null);
+      setUserMarker(null);
+    }
+
     // Add overlays when map loads
     drawDemoOverlays(mapToUse);
+  // ignore drawDemoOverlays deps (do not want to redraw on every function re-calc)
+  // eslint-disable-next-line
   }, [mapLoaded]);
+
+  // (B.2) Update map center and marker if geolocation state changes after map loaded.
+  useEffect(() => {
+    if (!mapLoaded || !mapRef.current || !geo.status) return;
+    const fallbackCoords = { lat: 40.7445, lng: -73.9906 };
+    if (geo.status === "success" && geo.coords) {
+      // Center and mark user
+      mapRef.current.panTo(geo.coords);
+      // If marker doesn't exist or is elsewhere, add/move
+      if (userMarker) {
+        userMarker.setPosition(geo.coords);
+        userMarker.setMap(mapRef.current);
+      } else {
+        const marker = new window.google.maps.Marker({
+          position: geo.coords,
+          map: mapRef.current,
+          title: "Your Location",
+          label: { text: "You", color: "#E91E63", fontWeight: "bold" },
+          icon: {
+            path: window.google.maps.SymbolPath.CIRCLE,
+            fillColor: "#2196f3",
+            fillOpacity: 0.9,
+            strokeColor: "#fff",
+            strokeWeight: 3,
+            scale: 10,
+          },
+        });
+        setUserMarker(marker);
+      }
+    } else {
+      // Not available/denied, remove user marker
+      if (userMarker) {
+        userMarker.setMap(null);
+        setUserMarker(null);
+      }
+      // Optional: pan to fallback when error occurs after initial
+      if (geo.status === "error") {
+        mapRef.current.panTo(fallbackCoords);
+      }
+    }
+  // only track those deps needed for center/marker
+  // eslint-disable-next-line
+  }, [geo, mapLoaded]);
 
   // (C) Feature Overlays Redrawer (when toggles/settings change)
   useEffect(() => {
@@ -312,6 +433,49 @@ function App() {
                 position: "relative",
                 background: "#f9f9fb"
               }}>
+              
+              {/* ============== Loading/Error/Status Banner UI ============== */}
+              {(geo.status === "loading" || !mapLoaded) && (
+                <div style={{
+                  position: "absolute",
+                  top: 21,
+                  left: "50%",
+                  transform: "translateX(-50%)",
+                  background: "#fff8",
+                  color: THEME.primary,
+                  fontWeight: 600,
+                  borderRadius: 8,
+                  padding: "10px 22px",
+                  zIndex: 11,
+                  fontSize: "1.03em",
+                  textShadow: "0 1px 10px #fff",
+                  boxShadow: "0 2px 10px rgba(44,44,44,.08)"
+                }}>
+                  { !mapLoaded
+                    ? "Loading map..." 
+                    : "Getting your location…" }
+                </div>
+              )}
+              {(geo.status === "error") && (
+                <div style={{
+                  position: "absolute",
+                  top: 21,
+                  left: "50%",
+                  transform: "translateX(-50%)",
+                  background: "#ffe3e3",
+                  color: "#d32f2f",
+                  fontWeight: 700,
+                  borderRadius: 8,
+                  padding: "11px 22px",
+                  zIndex: 11,
+                  fontSize: "1.04em",
+                  boxShadow: "0 2px 10px rgba(200,40,60,.09)"
+                }}>
+                  <span role="img" aria-label="warn" style={{marginRight: 4}}>⚠️</span> 
+                  {geo.error || "Could not access your location. Showing default area."}
+                </div>
+              )}
+
               <div
                 ref={mapCanvasRef}
                 tabIndex={0}
