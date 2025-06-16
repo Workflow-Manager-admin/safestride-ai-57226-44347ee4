@@ -1,5 +1,62 @@
+// PUBLIC_INTERFACE
 import React, { useState, useRef, useEffect } from "react";
 import "./App.css";
+
+// --- Constants & helper for route demo ---
+const DEMO_START = { lat: 40.7436, lng: -73.9914 }; // Example: Madison Sq Park
+const DEMO_END = { lat: 40.7476, lng: -73.9857 }; // Example: Empire State Bldg
+
+// Two polylines: one green/safe, one red/riskier
+const DEMO_ROUTES = [
+  {
+    name: "Safer Route",
+    color: "#19b96c",
+    points: [
+      { lat: 40.7436, lng: -73.9914 },
+      { lat: 40.7450, lng: -73.9888 },
+      { lat: 40.7476, lng: -73.9857 },
+    ],
+    safety: "safe",
+    warning: null,
+  },
+  {
+    name: "Riskier Route",
+    color: "#ec2323",
+    points: [
+      { lat: 40.7436, lng: -73.9914 },
+      { lat: 40.7443, lng: -73.9908 },
+      { lat: 40.7476, lng: -73.9857 },
+    ],
+    safety: "risky",
+    warning: "Enters high-crime zone",
+  },
+];
+
+// Example polygons (mock crime zones)
+// This high-crime polygon intentionally intersects the riskier route.
+const CRIME_POLYGONS = [
+  {
+    name: "High-Crime Area",
+    color: "#e02451",
+    warning: "Avoid: reported crimes (robbery/theft)",
+    path: [
+      { lat: 40.7447, lng: -73.9895 },
+      { lat: 40.7460, lng: -73.9880 },
+      { lat: 40.7470, lng: -73.9888 },
+      { lat: 40.7464, lng: -73.9902 },
+      { lat: 40.7447, lng: -73.9895 },
+    ],
+  },
+];
+
+// PUBLIC_INTERFACE
+function getMockWeather(center) {
+  // Returns fake bad weather if center lng < -73.987 else good
+  if (center && center.lng && center.lng < -73.987) {
+    return { temperature: 8, weathercode: 61, warning: "Rain 🌧️" }; // rain weather code
+  }
+  return { temperature: 19, weathercode: 1, warning: null };
+}
 
 // -- Google Maps Loader --
 function loadGoogleMapsScript(apiKey, callback) {
@@ -34,12 +91,143 @@ const THEME = {
   neutral: "#F7F7F9",
 };
 
+/* === Utility UI and helper components for new features === */
 // PUBLIC_INTERFACE
+function FeedbackModal({ open, onClose }) {
+  const [comment, setComment] = useState("");
+  return !open ? null : (
+    <div style={{
+      position: "fixed", top: 0, left: 0, width: "100vw", height: "100vh",
+      background: "rgba(44,44,44,0.27)", zIndex: 3000, display: "flex",
+      justifyContent: "center", alignItems: "center"
+    }}>
+      <div style={{
+        background: "white", color: "#131",
+        borderRadius: 14, boxShadow: "0 6px 32px #1211", padding: 30,
+        minWidth: 340, maxWidth: 420, fontWeight: 500
+      }}>
+        <div style={{ fontSize: "1.21em", fontWeight: 700, marginBottom: 10, color: "#E87A41" }}>Feedback</div>
+        <div style={{ color: "#444", fontSize: 15, marginBottom: 10 }}>How can we improve SafeStride?</div>
+        <textarea
+          value={comment}
+          onChange={e => setComment(e.target.value)}
+          style={{
+            width: "100%", padding: 8, border: "1.5px solid #e2e2e2",
+            borderRadius: 6, minHeight: 54, fontFamily: "inherit"
+          }}
+          autoFocus
+        />
+        <div style={{ marginTop: 15, display: "flex", gap: 9 }}>
+          <button
+            className="btn"
+            style={{ background: "#4CAF50", color: "#fff", fontWeight: 700 }}
+            onClick={() => { setComment(""); onClose(); }}>
+            Submit
+          </button>
+          <button
+            className="btn"
+            style={{ background: "#e5e5e5", color: "#222", fontWeight: 500 }}
+            onClick={onClose}>
+            Cancel
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// PUBLIC_INTERFACE
+function ReportUnsafeSpotModal({ open, onClose, onSubmit, location }) {
+  const [description, setDescription] = useState("");
+  return !open ? null : (
+    <div style={{
+      position: "fixed", top: 0, left: 0, width: "100vw", height: "100vh",
+      background: "rgba(44,44,44,0.21)", zIndex: 2999, display: "flex",
+      justifyContent: "center", alignItems: "center"
+    }}>
+      <div style={{
+        background: "white", color: "#111", borderRadius: 13,
+        boxShadow: "0 3px 22px #1938", padding: 28, minWidth: 340, maxWidth: 420
+      }}>
+        <div style={{ fontSize: "1.16em", fontWeight: 700, color: "#E91E63" }}>
+          Report Unsafe Spot
+        </div>
+        <div style={{ marginBottom: 9, color: "#444", fontSize: 15 }}>
+          Describe the safety issue at your current (or map) location.
+        </div>
+        <textarea
+          value={description}
+          onChange={(e) => setDescription(e.target.value)}
+          style={{
+            width: "100%", padding: 7, border: "1.4px solid #ccc",
+            borderRadius: 6, minHeight: 41, fontFamily: "inherit"
+          }}
+          autoFocus
+        />
+        <div style={{ fontSize: 13, color: "#444", margin: "5px 0" }}>
+          Location: {location ? `${location.lat.toFixed(5)}, ${location.lng.toFixed(5)}` : "unknown"}
+        </div>
+        <div style={{ marginTop: 12, display: "flex", gap: 8 }}>
+          <button
+            className="btn"
+            onClick={() => { setDescription(""); onSubmit(description); }}
+            style={{ background: "#E91E63", color: "#fff", fontWeight: 700 }}
+          >
+            Report
+          </button>
+          <button className="btn" style={{ background: "#e5e5e5", color: "#222" }} onClick={onClose}>
+            Cancel
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// PUBLIC_INTERFACE
+function SOSShareModal({ open, onClose, location }) {
+  // Provide a WhatsApp or mail share link with the current location and panic text.
+  const locStr = location ? `${location.lat.toFixed(5)},${location.lng.toFixed(5)}` : "unknown location";
+  const shareText = encodeURIComponent(`SOS! I need help at this location: https://maps.google.com/?q=${locStr}`);
+  const waLink = `https://wa.me/?text=${shareText}`;
+  const mailLink = `mailto:?subject=SOS! Help Needed&body=${shareText}`;
+  return !open ? null : (
+    <div style={{
+      position: "fixed", top: 0, left: 0, width: "100vw", height: "100vh",
+      background: "rgba(44,44,44,0.21)", zIndex: 3050, display: "flex",
+      justifyContent: "center", alignItems: "center"
+    }}>
+      <div style={{
+        background: "white", color: "#d32f2f", borderRadius: 16,
+        boxShadow: "0 3px 22px #8818", padding: 28, minWidth: 340, maxWidth: 430,
+        fontWeight: 600, fontSize: "1.07em"
+      }}>
+        <div style={{ fontSize: "1.19em", fontWeight: 900, color: "#E91E63" }}>
+          🚨 SOS - Send My Location
+        </div>
+        <div style={{ color: "#222", marginBottom: 7 }}>Share your real-time location with your emergency contacts:</div>
+        <a className="btn" style={{ background: "#25d366", color: "#fff", marginBottom: 6, display: "block" }}
+          href={waLink} rel="noopener noreferrer" target="_blank">WhatsApp Link</a>
+        <a className="btn" style={{ background: "#1976D2", color: "#fff", marginBottom: 10, display: "block" }}
+          href={mailLink} rel="noopener noreferrer" target="_blank">Email Link</a>
+        {location && (
+          <div style={{ fontSize: 13, color: "#555", marginBottom: 2 }}>
+            Coordinates: <b>{locStr}</b>
+          </div>
+        )}
+        <button className="btn" style={{ background: "#e5e5e5", color: "#222", marginTop: 9 }}
+          onClick={onClose}>Close</button>
+      </div>
+    </div>
+  );
+}
+
+/* === Main App with key safety & usability flows added === */
 function App() {
   // -- Google Maps API Key (Demo Only) --
-  const GOOGLE_MAPS_API_KEY = "AIzaSyCztCqCWGgNNh1xnr_Ey91rJGJC4ZC5VNY"; // Demo/test/public browser key.
+  const GOOGLE_MAPS_API_KEY = "AIzaSyCztCqCWGgNNh1xnr_Ey91rJGJC4ZC5VNY";
 
-  // ========== Core React State: Feature Toggles, User Demo Settings, and Map/Location ==========
+  // Main states
   const [showCrime, setShowCrime] = useState(true);
   const [showLighting, setShowLighting] = useState(true);
   const [showCrowds, setShowCrowds] = useState(true);
@@ -54,16 +242,19 @@ function App() {
   const [mapLoaded, setMapLoaded] = useState(false);
   const [weather, setWeather] = useState(null);
   const [notification, setNotification] = useState(null);
+  const [showFeedback, setShowFeedback] = useState(false);
+  const [showUnsafeModal, setShowUnsafeModal] = useState(false);
+  const [showSOSModal, setShowSOSModal] = useState(false);
+  const [lastUnsafeSpot, setLastUnsafeSpot] = useState(null); // {desc, coords}
 
   // Google Maps/geolocation improvement state
   const [geo, setGeo] = useState({ status: "loading", coords: null, error: null });
-  // status: 'loading' | 'success' | 'error'
   const [userMarker, setUserMarker] = useState(null);
 
   // Map Refs
   const mapRef = useRef();
   const mapCanvasRef = useRef();
-  const overlaysRef = useRef({}); // store overlay objects for updates
+  const overlaysRef = useRef({}); // overlay objects, e.g., for cleanup
 
   // (A) SETUP: Google Maps Loader & Initial Map Draw
   useEffect(() => {
@@ -118,14 +309,14 @@ function App() {
     );
   }, [mapLoaded]);
 
-  // (B) One-Time Map Initialization After Load and Geolocation
+  // (B) Map Initialization/Overlay Functions: (draw routes, polygons, etc.)
   useEffect(() => {
     if (!mapLoaded) return;
     if (!mapCanvasRef.current) return;
     if (mapRef.current) return; // already initialized
 
-    // Center: Use geolocated coords if available (async), else default to fallback
-    const fallbackCoords = { lat: 40.7445, lng: -73.9906 }; // New York City
+    // Center on geo or fallback
+    const fallbackCoords = { lat: 40.7445, lng: -73.9906 };
     const initialCoords =
       geo.status === "success" && geo.coords
         ? geo.coords
@@ -144,9 +335,8 @@ function App() {
       ],
     });
     mapRef.current = mapToUse;
-    window.mapInstance = mapToUse; // for debugging
 
-    // Place user's marker (if geolocation available)
+    // Mark user if geo avail
     if (geo.status === "success" && geo.coords) {
       const marker = new window.google.maps.Marker({
         position: geo.coords,
@@ -163,25 +353,25 @@ function App() {
         },
       });
       setUserMarker(marker);
-    } else if (userMarker) {
-      userMarker.setMap(null);
-      setUserMarker(null);
     }
 
-    // Add overlays when map loads
-    drawDemoOverlays(mapToUse);
-  // ignore drawDemoOverlays deps (do not want to redraw on every function re-calc)
+    drawAllOverlays(mapToUse);
   // eslint-disable-next-line
   }, [mapLoaded]);
 
-  // (B.2) Update map center and marker if geolocation state changes after map loaded.
   useEffect(() => {
-    if (!mapLoaded || !mapRef.current || !geo.status) return;
+    if (!mapLoaded || !mapRef.current) return;
+    clearAllOverlays();
+    drawAllOverlays(mapRef.current);
+    // eslint-disable-next-line
+  }, [showCrime, showLighting, showCrowds, personalization]);
+
+  // (B.2) Update center and marker if geolocation changes
+  useEffect(() => {
+    if (!mapLoaded || !mapRef.current) return;
     const fallbackCoords = { lat: 40.7445, lng: -73.9906 };
     if (geo.status === "success" && geo.coords) {
-      // Center and mark user
       mapRef.current.panTo(geo.coords);
-      // If marker doesn't exist or is elsewhere, add/move
       if (userMarker) {
         userMarker.setPosition(geo.coords);
         userMarker.setMap(mapRef.current);
@@ -203,51 +393,143 @@ function App() {
         setUserMarker(marker);
       }
     } else {
-      // Not available/denied, remove user marker
       if (userMarker) {
         userMarker.setMap(null);
         setUserMarker(null);
       }
-      // Optional: pan to fallback when error occurs after initial
       if (geo.status === "error") {
         mapRef.current.panTo(fallbackCoords);
       }
     }
-  // only track those deps needed for center/marker
   // eslint-disable-next-line
   }, [geo, mapLoaded]);
 
-  // (C) Feature Overlays Redrawer (when toggles/settings change)
+  // Weather effect (mock if fail)
   useEffect(() => {
-    if (!mapLoaded || !mapRef.current) return;
-    clearAllOverlays();
-    drawDemoOverlays(mapRef.current);
-    // eslint-disable-next-line
-  }, [showCrime, showLighting, showCrowds, personalization]);
-
-  // (D) Weather Layer/Adaptation
-  useEffect(() => {
-    // Eg: Use Open-Meteo free API or mock fallback
     async function fetchWeather() {
       if (!mapRef.current) return;
       const center = mapRef.current.getCenter();
       const lat = center.lat();
       const lng = center.lng();
+      // Try open-meteo, fall back to mock/weather
       try {
         const resp = await fetch(
           `https://api.open-meteo.com/v1/forecast?latitude=${lat.toFixed(4)}&longitude=${lng.toFixed(4)}&current_weather=true`
         );
         const data = await resp.json();
         if (data.current_weather) setWeather(data.current_weather);
-        else setWeather({ temperature: 7, weathercode: 3 });
+        else setWeather(getMockWeather({ lat, lng }));
       } catch {
-        // Fallback/demo weather
-        setWeather({ temperature: 7, weathercode: 3 });
+        setWeather(getMockWeather({ lat, lng }));
       }
     }
     if (showWeather && mapLoaded) fetchWeather();
     // eslint-disable-next-line
   }, [showWeather, mapLoaded]);
+
+  // Notification for SOS
+  useEffect(() => {
+    if (sosActive) {
+      setShowSOSModal(true);
+      setNotification("Emergency SOS triggered! Help is on the way.");
+      const timer = setTimeout(() => setNotification(null), 3500);
+      return () => clearTimeout(timer);
+    }
+  }, [sosActive]);
+
+  // --- Overlays ---
+  function clearAllOverlays() {
+    for (const key in overlaysRef.current) {
+      if (overlaysRef.current[key]?.setMap) {
+        overlaysRef.current[key].setMap(null);
+      }
+      if (Array.isArray(overlaysRef.current[key])) {
+        overlaysRef.current[key].forEach((item) => {
+          if (item?.setMap) item.setMap(null);
+        });
+      }
+    }
+    overlaysRef.current = {};
+  }
+
+  // Draw: routes, polygons for crime, warning zones; highlight best
+  function drawAllOverlays(map) {
+    // 1. Draw demo routes
+    overlaysRef.current.routes = DEMO_ROUTES.map((route, i) =>
+      new window.google.maps.Polyline({
+        path: route.points,
+        geodesic: true,
+        strokeColor: route.color,
+        strokeOpacity: route.safety === "safe" ? 0.97 : 0.82,
+        strokeWeight: route.safety === "safe" ? 7 : 6,
+        map,
+        zIndex: 10 + i,
+      })
+    );
+
+    // 2. Draw crime zones
+    if (showCrime) {
+      overlaysRef.current.crimeZones = CRIME_POLYGONS.map((poly, idx) =>
+        new window.google.maps.Polygon({
+          paths: poly.path,
+          strokeColor: poly.color,
+          strokeOpacity: 0.9,
+          strokeWeight: 1,
+          fillColor: poly.color,
+          fillOpacity: 0.29,
+          map,
+          zIndex: 18,
+        })
+      );
+    }
+
+    // 3. Mark start/end
+    overlaysRef.current.start = new window.google.maps.Marker({
+      position: DEMO_START,
+      map,
+      title: "Start",
+      label: { text: "A", color: "#3a3", fontWeight: "bold" },
+      icon: {
+        path: window.google.maps.SymbolPath.BACKWARD_CLOSED_ARROW,
+        scale: 7,
+        fillColor: "#4CAF50",
+        fillOpacity: 1,
+        strokeWeight: 1,
+      },
+      zIndex: 15,
+    });
+    overlaysRef.current.end = new window.google.maps.Marker({
+      position: DEMO_END,
+      map,
+      title: "Destination",
+      label: { text: "B", color: "#1976d2", fontWeight: "bold" },
+      icon: {
+        path: window.google.maps.SymbolPath.FORWARD_CLOSED_ARROW,
+        scale: 7,
+        fillColor: "#1976d2",
+        fillOpacity: 1,
+        strokeWeight: 1,
+      },
+      zIndex: 15,
+    });
+  }
+
+  // Utility: does a route intersect a crime polygon?
+  function routeCrossesCrime(routePoints, crimePolygon) {
+    function pointInPoly(pt, polyPath) {
+      // Ray casting even-odd algorithm (for convex polygons, suffices for sample data)
+      let n = polyPath.length, inside = false;
+      for (let i = 0, j = n-1; i < n; j = i++) {
+        const xi = polyPath[i].lng, yi = polyPath[i].lat;
+        const xj = polyPath[j].lng, yj = polyPath[j].lat;
+        const intersect = ((yi > pt.lat) !== (yj > pt.lat))
+          && (pt.lng < (xj - xi) * (pt.lat - yi) / (yj - yi + 1e-9) + xi);
+        if (intersect) inside = !inside;
+      }
+      return inside;
+    }
+    return crimePolygon ? routePoints.some(pt => pointInPoly(pt, crimePolygon.path)) : false;
+  }
 
   // (E) Notification effect for demo purposes (SOS, alerts)
   useEffect(() => {
@@ -383,8 +665,29 @@ function App() {
   }
 
   // ================ UI: Render ==================
+  // Route, crime, weather alert integration
+  const [currentRouteIndex, setCurrentRouteIndex] = useState(0);
+  const selectedRoute = DEMO_ROUTES[currentRouteIndex];
+  const crimeAlerts = CRIME_POLYGONS
+    .map((poly) =>
+      routeCrossesCrime(selectedRoute.points, poly)
+        ? `Route enters ${poly.name}: ${poly.warning}`
+        : null
+    )
+    .filter(Boolean);
+  const wxAlert =
+    weather && weather.weathercode && [61, 63, 65, 80, 81, 82, 95, 96, 99].includes(weather.weathercode)
+      ? "Bad weather detected – suggest safe or covered route. ⚠️"
+      : null;
+
   return (
-    <div className="app" style={{ background: THEME.neutral, minHeight: "100vh", display: "flex", flexDirection: "column" }}>
+    <div className="app"
+      style={{
+        background: THEME.neutral,
+        minHeight: "100vh",
+        display: "flex",
+        flexDirection: "column"
+      }}>
       {/* Navigation Bar */}
       <nav className="navbar" style={{ background: THEME.primary, color: "white" }}>
         <div className="container">
@@ -402,15 +705,13 @@ function App() {
               >🚶‍♂️</span>{" "}
               SafeStride AI
             </div>
-            <UserMenu
-              prefs={personalization}
-              onPrefsChange={setPersonalization}
-            />
+            <UserMenu prefs={personalization} onPrefsChange={setPersonalization} />
           </div>
         </div>
       </nav>
       <main style={{ flex: 1, paddingTop: 90 }}>
         <div className="container" style={{ maxWidth: "1400px", width: "100%" }}>
+          {/* Add route/alert panel above map */}
           <section className="hero"
             style={{
               padding: "28px 0 20px 0",
@@ -419,8 +720,9 @@ function App() {
               alignItems: "flex-start",
               flexDirection: "row-reverse",
               minHeight: 480,
+              position: "relative"
             }}>
-            {/* Google Maps Canvas Centerpiece */}
+            {/* Google Maps */}
             <div
               style={{
                 flex: 3.5,
@@ -433,49 +735,109 @@ function App() {
                 position: "relative",
                 background: "#f9f9fb"
               }}>
-              
-              {/* ============== Loading/Error/Status Banner UI ============== */}
+              {/* Status/UI Banners */}
               {(geo.status === "loading" || !mapLoaded) && (
                 <div style={{
-                  position: "absolute",
-                  top: 21,
-                  left: "50%",
-                  transform: "translateX(-50%)",
-                  background: "#fff8",
-                  color: THEME.primary,
-                  fontWeight: 600,
-                  borderRadius: 8,
-                  padding: "10px 22px",
-                  zIndex: 11,
-                  fontSize: "1.03em",
-                  textShadow: "0 1px 10px #fff",
-                  boxShadow: "0 2px 10px rgba(44,44,44,.08)"
+                  position: "absolute", top: 21, left: "50%", transform: "translateX(-50%)",
+                  background: "#fff8", color: THEME.primary, fontWeight: 600, borderRadius: 8,
+                  padding: "10px 22px", zIndex: 11, fontSize: "1.03em",
+                  textShadow: "0 1px 10px #fff", boxShadow: "0 2px 10px rgba(44,44,44,.08)"
                 }}>
-                  { !mapLoaded
-                    ? "Loading map..." 
-                    : "Getting your location…" }
+                  {!mapLoaded ? "Loading map..." : "Getting your location…"}
                 </div>
               )}
               {(geo.status === "error") && (
                 <div style={{
-                  position: "absolute",
-                  top: 21,
-                  left: "50%",
-                  transform: "translateX(-50%)",
-                  background: "#ffe3e3",
-                  color: "#d32f2f",
-                  fontWeight: 700,
-                  borderRadius: 8,
-                  padding: "11px 22px",
-                  zIndex: 11,
-                  fontSize: "1.04em",
+                  position: "absolute", top: 21, left: "50%", transform: "translateX(-50%)",
+                  background: "#ffe3e3", color: "#d32f2f", fontWeight: 700, borderRadius: 8,
+                  padding: "11px 22px", zIndex: 11, fontSize: "1.04em",
                   boxShadow: "0 2px 10px rgba(200,40,60,.09)"
                 }}>
-                  <span role="img" aria-label="warn" style={{marginRight: 4}}>⚠️</span> 
+                  <span role="img" aria-label="warn" style={{ marginRight: 4 }}>⚠️</span>
                   {geo.error || "Could not access your location. Showing default area."}
                 </div>
               )}
-
+              {/* Route choose / alert panel */}
+              <div style={{
+                position: "absolute", top: 11, left: 14, right: 16, zIndex: 20, minHeight: 0
+              }}>
+                <div style={{
+                  display: "flex", background: "#fff", borderRadius: 9, boxShadow: "0 2px 18px #2c2c2c0f",
+                  fontSize: 16, fontWeight: 600, alignItems: "center", gap: 12, padding: "10px 15px"
+                }}>
+                  <span style={{ color: "#E91E63", marginRight: 8, fontSize: "1.17em" }}>🧭</span>
+                  <span>Demo Routes:</span>
+                  {DEMO_ROUTES.map((r, i) => (
+                    <button key={i}
+                      className="btn"
+                      style={{
+                        fontWeight: 700,
+                        fontSize: ".97em",
+                        marginLeft: 4,
+                        background: r.safety === "safe" ? "#26c46c" : "#ec2323",
+                        color: "#fff",
+                        opacity: i === currentRouteIndex ? 1 : 0.74,
+                        border: i === currentRouteIndex ? "2.5px solid #444" : "1.2px solid #e2e5ff"
+                      }}
+                      aria-label={`Show ${r.name}`}
+                      onClick={() => setCurrentRouteIndex(i)}
+                    >{r.name}</button>
+                  ))}
+                  <span style={{ marginLeft: "auto" }} />
+                  {/* Feedback/Report/SOS compact */}
+                  <button
+                    className="btn"
+                    style={{ background: "#E91E63", fontWeight: 600, fontSize: ".93em" }}
+                    aria-label="Give Feedback"
+                    onClick={() => setShowFeedback(true)}>
+                    💬 Feedback
+                  </button>
+                  <button
+                    className="btn"
+                    style={{ background: "#ff9800", fontWeight: 600, marginLeft: 6, fontSize: ".93em" }}
+                    aria-label="Report Unsafe Spot"
+                    onClick={() => setShowUnsafeModal(true)}>
+                    🚩 Report
+                  </button>
+                  <button
+                    className="btn"
+                    style={{
+                      background: "#1976D2",
+                      fontWeight: 900,
+                      marginLeft: 7,
+                      color: "#fff",
+                      fontSize: ".96em"
+                    }}
+                    aria-label="SOS"
+                    onClick={() => setShowSOSModal(true)}
+                  >
+                    🚨 SOS
+                  </button>
+                </div>
+                {/* Warnings */}
+                {(crimeAlerts.length > 0 || wxAlert) && (
+                  <div style={{
+                    marginTop: 8,
+                    background: "#ffe3e3",
+                    color: "#d32f2f",
+                    fontWeight: 700,
+                    fontSize: "1.01em",
+                    borderRadius: 7,
+                    padding: "8px 14px",
+                    boxShadow: "0 2px 8px #790c0c13",
+                    zIndex: 22
+                  }}>
+                    {crimeAlerts.length > 0 &&
+                      <div><span role="img" aria-label="warn">❗</span> {crimeAlerts.join(" | ")}</div>
+                    }
+                    {wxAlert && (
+                      <div style={{ marginTop: crimeAlerts.length > 0 ? 5 : 0 }}>
+                        <span role="img" aria-label="weather">🌧️</span> {wxAlert}
+                      </div>
+                    )}
+                  </div>
+                )}
+              </div>
               <div
                 ref={mapCanvasRef}
                 tabIndex={0}
@@ -493,7 +855,7 @@ function App() {
                 aria-label="Emergency SOS"
                 tabIndex={0}
                 className="btn"
-                onClick={() => setSosActive(true)}
+                onClick={() => setShowSOSModal(true)}
                 style={{
                   position: "absolute",
                   right: 16,
@@ -509,8 +871,26 @@ function App() {
                 }}>
                 🚨 SOS
               </button>
+              {/* Modal UIs */}
+              <FeedbackModal open={showFeedback} onClose={() => setShowFeedback(false)} />
+              <ReportUnsafeSpotModal
+                open={showUnsafeModal}
+                onClose={() => setShowUnsafeModal(false)}
+                onSubmit={(desc) => {
+                  setShowUnsafeModal(false);
+                  setLastUnsafeSpot({ desc, coords: geo.coords });
+                  setNotification("Thank you! Unsafe spot reported.");
+                  setTimeout(() => setNotification(null), 2600);
+                }}
+                location={geo.coords || DEMO_START}
+              />
+              <SOSShareModal
+                open={showSOSModal}
+                onClose={() => setShowSOSModal(false)}
+                location={geo.coords || DEMO_START}
+              />
             </div>
-            {/* --- Sidebar: Controls & Feature Toggles --- */}
+            {/* Sidebar */}
             <div style={{ flex: 2, minWidth: 250, maxWidth: 350, paddingRight: 4, paddingLeft: 8 }}>
               <div style={{
                 color: THEME.primary,
@@ -545,9 +925,20 @@ function App() {
                 onChange={setPersonalization}
                 theme={THEME}
               />
+              {/* Last unsafe spot check notification */}
+              {lastUnsafeSpot && (
+                <div style={{
+                  background: "#fffde7", color: "#1565c0",
+                  fontWeight: 600, fontSize: ".98em",
+                  margin: "12px 0", borderRadius: 5, padding: "7px 12px"
+                }}>
+                  <span role="img" aria-label="flag">🚩</span>{" "}
+                  You reported: "{lastUnsafeSpot.desc}" at location {lastUnsafeSpot.coords ? `${lastUnsafeSpot.coords.lat.toFixed(4)},${lastUnsafeSpot.coords.lng.toFixed(4)}` : ""}
+                </div>
+              )}
             </div>
           </section>
-          {/* ========== Features/Stub Panels Section ========== */}
+          {/* Feature/stub panels (unchanged) */}
           <section
             style={{
               display: 'flex',
@@ -571,7 +962,7 @@ function App() {
                 <WeatherAdaptationStub weather={weather} />
               </FeatureCard>
               <FeatureCard name="Emergency SOS" color={THEME.accent}>
-                <SOSFeatureStub active={sosActive} onReset={() => setSosActive(false)} />
+                <SOSFeatureStub active={showSOSModal} onReset={() => setShowSOSModal(false)} />
               </FeatureCard>
               <FeatureCard name="User Personalization" color={THEME.primary}>
                 <PersonalizationStub prefs={personalization} />
@@ -594,7 +985,7 @@ function App() {
           </section>
         </div>
       </main>
-      {/* ----- Alert/Notification Snackbar ----- */}
+      {/* Alert/Notification Snackbar */}
       {notification &&
         <div
           style={{
