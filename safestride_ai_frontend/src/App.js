@@ -173,45 +173,76 @@ function loadGoogleMapsScript(apiKey, callback) {
   document.body.appendChild(script);
 }
 
-// --- Theme Color Constants for Consistency (fallback if CSS variables fail) ---
+/* --- Theme Color Constants for Consistency (fallback if CSS variables fail) --- */
 const THEME = {
-  primary: "#4CAF50",
-  secondary: "#FFC107",
-  accent: "#E91E63",
+  primary: "#4CAF50",        // Green (SafeStride)
+  secondary: "#FFC107",      // Yellow/Amber
+  accent: "#E91E63",         // Pink
   neutral: "#F7F7F9",
+  overlay_crime: "#e02451",
+  overlay_lighting: "#FFD600",
+  overlay_crowd_high: "#0091EA",
+  overlay_route_safe: "#19b96c",
+  overlay_route_risky: "#ec2323",
+  text_dark: "#111822",
+  text_light: "#fff",
+  warn_red: "#A50B0B",
+  bg_warn: "#ffeaea",
+  banner_bg_info: "#eefeeb",
+  banner_bg_warn: "#fff9e3",
+  legend_bg: "#f9fafc"
 };
 
 /* === Utility UI and helper components for new features === */
 // ...keep FeedbackModal, ReportUnsafeSpotModal, SOSShareModal here (unchanged below)...
 // PUBLIC_INTERFACE
 function FeedbackModal({ open, onClose }) {
+  // PUBLIC_INTERFACE
   const [comment, setComment] = useState("");
   return !open ? null : (
     <div style={{
       position: "fixed", top: 0, left: 0, width: "100vw", height: "100vh",
-      background: "rgba(44,44,44,0.27)", zIndex: 3000, display: "flex",
+      background: "rgba(44,44,44,0.33)", zIndex: 3000, display: "flex",
       justifyContent: "center", alignItems: "center"
     }}>
       <div style={{
-        background: "white", color: "#131",
-        borderRadius: 14, boxShadow: "0 6px 32px #1211", padding: 30,
-        minWidth: 340, maxWidth: 420, fontWeight: 500
+        background: THEME.neutral,
+        color: THEME.text_dark,
+        borderRadius: 16,
+        boxShadow: "0 8px 38px #18633a25",
+        padding: 32,
+        minWidth: 340,
+        maxWidth: 430,
+        fontWeight: 500,
+        border: `2px solid ${THEME.primary}`
       }}>
-        <div style={{ fontSize: "1.21em", fontWeight: 700, marginBottom: 10, color: "#E87A41" }}>Feedback</div>
-        <div style={{ color: "#444", fontSize: 15, marginBottom: 10 }}>How can we improve SafeStride?</div>
+        <div style={{
+          fontSize: "1.21em",
+          fontWeight: 700,
+          marginBottom: 12,
+          color: THEME.primary,
+          letterSpacing: ".01em"
+        }}>Feedback</div>
+        <div style={{ color: THEME.text_dark, fontSize: 15, marginBottom: 11 }}>How can we improve SafeStride?</div>
         <textarea
           value={comment}
           onChange={e => setComment(e.target.value)}
           style={{
-            width: "100%", padding: 8, border: "1.5px solid #e2e2e2",
-            borderRadius: 6, minHeight: 54, fontFamily: "inherit"
+            width: "100%",
+            padding: 10,
+            border: `2px solid ${THEME.primary}`,
+            borderRadius: 7,
+            minHeight: 62,
+            fontFamily: "inherit",
+            background: "#fff"
           }}
           autoFocus
+          aria-label="Feedback"
         />
-        <div style={{ marginTop: 15, display: "flex", gap: 9 }}>
+        <div style={{ marginTop: 17, display: "flex", gap: 10 }}>
           <button
             className="btn"
-            style={{ background: "#4CAF50", color: "#fff", fontWeight: 700 }}
+            style={{ background: THEME.primary, color: THEME.text_light, fontWeight: 700 }}
             onClick={() => { setComment(""); onClose(); }}>
             Submit
           </button>
@@ -272,44 +303,57 @@ function MapLegend() {
     <div style={{
       marginTop: 10,
       borderRadius: 9,
-      background: "#fcfcfc",
+      background: THEME.legend_bg,
       border: "1.5px solid #d6d6d8",
       boxShadow: "0 2px 12px #0d0f0f11",
       padding: "10px 15px 10px",
       fontSize: "1.01em",
-      maxWidth: 320,
-      color: "#222b"
+      maxWidth: 332,
+      color: THEME.text_dark,
+      lineHeight: 1.35,
+      fontWeight: 500
     }}>
       <div style={{ fontWeight: 700, paddingBottom: 5, letterSpacing: ".04em" }}>Legend</div>
       <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 5 }}>
         <span style={{
           display: "inline-block",
-          width: 20, height: 11, borderRadius: 5,
-          background: "#e02451", border: "1px solid #e02451", verticalAlign: "middle"
-        }} /> Crime Zone
+          width: 20, height: 13, borderRadius: 5,
+          background: THEME.overlay_crime, border: `1px solid ${THEME.overlay_crime}`, verticalAlign: "middle"
+        }} /> <span style={{fontWeight:600}}>Crime Zone</span>
       </div>
       <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 5 }}>
         <span style={{
           display: "inline-block",
-          width: 20, height: 11, borderRadius: 5,
-          background: "#FFD600", border: "1px solid #FFD600", verticalAlign: "middle"
-        }} /> Well-Lit Area (Demo)
+          width: 20, height: 13, borderRadius: 5,
+          background: THEME.overlay_lighting, border: `1px solid ${THEME.overlay_lighting}`, verticalAlign: "middle"
+        }} /> <span style={{fontWeight:600}}>Well-Lit Area (Demo)</span>
       </div>
       <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 5 }}>
         <span style={{
           display: "inline-block",
-          width: 20, height: 11, borderRadius: 5,
-          background: "#0091EA", border: "1px solid #0091EA", verticalAlign: "middle"
-        }} /> Crowd Density (High) (Demo)
+          width: 20, height: 13, borderRadius: 5,
+          background: THEME.overlay_crowd_high, border: `1px solid ${THEME.overlay_crowd_high}`, verticalAlign: "middle"
+        }} /> <span style={{fontWeight:600}}>Crowd Density (High)</span>
       </div>
       <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
         <span style={{
           display: "inline-block",
-          width: 20, height: 5, borderRadius: 3,
-          background: "#19b96c", border: "1.5px solid #19b96c"
+          width: 22,
+          height: 6,
+          borderRadius: 3,
+          background: THEME.overlay_route_safe,
+          border: `2px solid ${THEME.overlay_route_safe}`
         }} />
-        <span>Safer Route</span>
-        <span style={{ display: "inline-block", marginLeft: 10, width: 20, height: 5, borderRadius: 3, background: "#ec2323", border: "1.5px solid #ec2323" }} />
+        <span style={{marginRight: 7}}>Safer Route</span>
+        <span style={{
+          display: "inline-block",
+          width: 22,
+          height: 6,
+          borderRadius: 3,
+          background: THEME.overlay_route_risky,
+          border: `2px solid ${THEME.overlay_route_risky}`,
+          marginLeft: 12
+        }} />
         <span>Riskier Route</span>
       </div>
     </div>
@@ -319,40 +363,58 @@ function MapLegend() {
 // ...Other modal/component stubs, unchanged...
 
 function ReportUnsafeSpotModal({ open, onClose, onSubmit, location }) {
+  // PUBLIC_INTERFACE
   const [description, setDescription] = useState("");
   return !open ? null : (
     <div style={{
       position: "fixed", top: 0, left: 0, width: "100vw", height: "100vh",
-      background: "rgba(44,44,44,0.21)", zIndex: 2999, display: "flex",
+      background: "rgba(44,44,44,0.23)", zIndex: 2999, display: "flex",
       justifyContent: "center", alignItems: "center"
     }}>
       <div style={{
-        background: "white", color: "#111", borderRadius: 13,
-        boxShadow: "0 3px 22px #1938", padding: 28, minWidth: 340, maxWidth: 420
+        background: THEME.neutral,
+        color: THEME.text_dark,
+        borderRadius: 15,
+        boxShadow: "0 4px 30px #e91e6315",
+        padding: 29,
+        minWidth: 343,
+        maxWidth: 435,
+        fontWeight: 500,
+        border: `2px solid ${THEME.accent}`
       }}>
-        <div style={{ fontSize: "1.16em", fontWeight: 700, color: "#E91E63" }}>
+        <div style={{
+          fontSize: "1.18em",
+          fontWeight: 700,
+          color: THEME.accent
+        }}>
           Report Unsafe Spot
         </div>
-        <div style={{ marginBottom: 9, color: "#444", fontSize: 15 }}>
+        <div style={{ marginBottom: 9, color: "#333", fontSize: 15 }}>
           Describe the safety issue at your current (or map) location.
         </div>
         <textarea
           value={description}
           onChange={(e) => setDescription(e.target.value)}
           style={{
-            width: "100%", padding: 7, border: "1.4px solid #ccc",
-            borderRadius: 6, minHeight: 41, fontFamily: "inherit"
+            width: "100%",
+            padding: 9,
+            border: `2px solid ${THEME.accent}`,
+            borderRadius: 7,
+            minHeight: 48,
+            fontFamily: "inherit",
+            background: "#f7f7fa"
           }}
           autoFocus
+          aria-label="Describe safety issue"
         />
         <div style={{ fontSize: 13, color: "#444", margin: "5px 0" }}>
           Location: {location ? `${location.lat.toFixed(5)}, ${location.lng.toFixed(5)}` : "unknown"}
         </div>
-        <div style={{ marginTop: 12, display: "flex", gap: 8 }}>
+        <div style={{ marginTop: 13, display: "flex", gap: 9 }}>
           <button
             className="btn"
             onClick={() => { setDescription(""); onSubmit(description); }}
-            style={{ background: "#E91E63", color: "#fff", fontWeight: 700 }}
+            style={{ background: THEME.accent, color: "#fff", fontWeight: 700 }}
           >
             Report
           </button>
@@ -754,49 +816,108 @@ function App() {
 
   // Draw: routes, polygons for crime, warning zones; highlight best
   function drawAllOverlays(map) {
-    // 1. Draw demo routes
+    // 1. Draw demo routes (with theme-aligned high-contrast)
     overlaysRef.current.routes = DEMO_ROUTES.map((route, i) =>
       new window.google.maps.Polyline({
         path: route.points,
         geodesic: true,
-        strokeColor: route.color,
-        strokeOpacity: route.safety === "safe" ? 0.97 : 0.82,
-        strokeWeight: route.safety === "safe" ? 7 : 6,
+        strokeColor: route.safety === "safe" ? THEME.overlay_route_safe : THEME.overlay_route_risky,
+        strokeOpacity: 0.99,
+        strokeWeight: route.safety === "safe" ? 9 : 8,
+        icons: route.safety === "risky"
+          ? [{icon: {path: "M 0,-1 0,1", strokeOpacity: 1, scale: 3}, offset: "0", repeat: "15px"}]
+          : [],
         map,
-        zIndex: 10 + i,
+        zIndex: 20 + i,
       })
     );
 
-    // 2. Draw crime zones (live or fallback)
+    // 2. Draw crime zones (live or fallback) with more visible contrast
     if (showCrime && Array.isArray(crimePolygons)) {
       overlaysRef.current.crimeZones = crimePolygons.map((poly, idx) =>
         new window.google.maps.Polygon({
           paths: poly.path,
-          strokeColor: poly.color || "#e02451",
-          strokeOpacity: 0.9,
-          strokeWeight: 1,
-          fillColor: poly.color || "#e02451",
-          fillOpacity: 0.29,
+          strokeColor: poly.color || THEME.overlay_crime,
+          strokeOpacity: 1,
+          strokeWeight: 3,
+          fillColor: poly.color || THEME.overlay_crime,
+          fillOpacity: 0.37,
           map,
-          zIndex: 18,
+          zIndex: 33,
         })
       );
     }
 
-    // 3. Mark start/end
+    // 2.5 Draw demo "well-lit" lighting overlay -- placeholder polygon/shape, yellow theme
+    if (showLighting) {
+      // Demo area: soft rectangle NE of center, visually distinct yellow
+      const poly = new window.google.maps.Polygon({
+        paths: [
+          {lat: 40.7466, lng: -73.9885},
+          {lat: 40.7487, lng: -73.9864},
+          {lat: 40.7480, lng: -73.9847},
+          {lat: 40.7463, lng: -73.9869},
+          {lat: 40.7466, lng: -73.9885},
+        ],
+        strokeColor: THEME.overlay_lighting,
+        strokeOpacity: 0.65,
+        strokeWeight: 2,
+        fillColor: THEME.overlay_lighting,
+        fillOpacity: 0.27,
+        map,
+        zIndex: 32,
+      });
+      overlaysRef.current.lightingZone = [poly];
+    }
+
+    // 2.7 Draw crowd density overlay (high density: bright blue, placeholder locations)
+    if (showCrowds) {
+      const crowdAreas = [
+        // Demo: simulates high crowd in a public square and on a segment
+        [
+          { lat: 40.7448, lng: -73.9885 },
+          { lat: 40.7451, lng: -73.9878 },
+          { lat: 40.7458, lng: -73.9880 },
+          { lat: 40.7456, lng: -73.9889 },
+          { lat: 40.7448, lng: -73.9885 }
+        ],
+        [
+          { lat: 40.7475, lng: -73.9856 },
+          { lat: 40.7471, lng: -73.9853 },
+          { lat: 40.7478, lng: -73.9845 },
+          { lat: 40.7481, lng: -73.9851 },
+          { lat: 40.7475, lng: -73.9856 }
+        ]
+      ];
+      overlaysRef.current.crowdZones = crowdAreas.map((pts) =>
+        new window.google.maps.Polygon({
+          paths: pts,
+          strokeColor: THEME.overlay_crowd_high,
+          strokeOpacity: 1,
+          strokeWeight: 2.5,
+          fillColor: THEME.overlay_crowd_high,
+          fillOpacity: 0.25,
+          map,
+          zIndex: 31,
+        })
+      );
+    }
+
+    // 3. Mark start/end with increased contrast and clear shape
     overlaysRef.current.start = new window.google.maps.Marker({
       position: DEMO_START,
       map,
       title: "Start",
-      label: { text: "A", color: "#3a3", fontWeight: "bold" },
+      label: { text: "A", color: THEME.overlay_route_safe, fontWeight: "bold" },
       icon: {
         path: window.google.maps.SymbolPath.BACKWARD_CLOSED_ARROW,
-        scale: 7,
-        fillColor: "#4CAF50",
+        scale: 7.5,
+        fillColor: THEME.primary,
         fillOpacity: 1,
-        strokeWeight: 1,
+        strokeWeight: 2,
+        strokeColor: "#fff"
       },
-      zIndex: 15,
+      zIndex: 42,
     });
     overlaysRef.current.end = new window.google.maps.Marker({
       position: DEMO_END,
@@ -805,12 +926,13 @@ function App() {
       label: { text: "B", color: "#1976d2", fontWeight: "bold" },
       icon: {
         path: window.google.maps.SymbolPath.FORWARD_CLOSED_ARROW,
-        scale: 7,
+        scale: 7.5,
         fillColor: "#1976d2",
         fillOpacity: 1,
-        strokeWeight: 1,
+        strokeWeight: 2,
+        strokeColor: "#fff"
       },
-      zIndex: 15,
+      zIndex: 42,
     });
   }
 
@@ -905,24 +1027,27 @@ function App() {
                 background: "#f9f9fb"
               }}>
               {/* Map overlays and alerts */}
+              {/* Main map banners */}
               {(crimeDataStatus === "loading") && (
                 <div style={{
                   position: "absolute",
                   top: 15,
                   left: 0,
                   right: 0,
-                  zIndex: 50,
+                  zIndex: 70,
                   textAlign: "center",
                   fontWeight: 600,
-                  color: "#E91E63",
-                  background: "rgba(255,255,255,0.90)",
+                  color: THEME.accent,
+                  background: THEME.banner_bg_info,
+                  border: `1.5px solid ${THEME.accent}`,
                   padding: "6px 0",
-                  borderRadius: 6,
+                  borderRadius: 7,
                   margin: "6px auto 0",
                   width: "95%",
-                  fontSize: "1em"
+                  fontSize: "1.04em",
+                  letterSpacing: ".01em"
                 }}>
-                  Loading live crime overlays...
+                  <span aria-live="polite" style={{display:"inline-flex",alignItems:"center"}}>⏳ Loading live crime overlays...</span>
                 </div>
               )}
               {(crimeDataStatus === "fallback") && (
@@ -931,18 +1056,93 @@ function App() {
                   top: 15,
                   left: 0,
                   right: 0,
-                  zIndex: 49,
+                  zIndex: 69,
                   textAlign: "center",
                   fontWeight: 600,
-                  color: "#A50B0B",
-                  background: "rgba(255,199,199,0.90)",
-                  padding: "5px 0",
-                  borderRadius: 6,
+                  color: THEME.warn_red,
+                  background: THEME.bg_warn,
+                  border: `1.5px solid ${THEME.warn_red}`,
+                  padding: "6px 0",
+                  borderRadius: 7,
                   margin: "7px auto 0",
-                  width: "93%",
-                  fontSize: ".98em"
+                  width: "95%",
+                  fontSize: "1em",
+                  letterSpacing: ".01em"
                 }}>
                   Live crime data unavailable. Displaying sample zones for demo.
+                </div>
+              )}
+              {/* Feedback/SOS/Warning banners */}
+              {notification && (
+                <div
+                  style={{
+                    position: "absolute",
+                    top: 62,
+                    left: "50%",
+                    transform: "translateX(-50%)",
+                    zIndex: 75,
+                    background: THEME.banner_bg_warn,
+                    color: THEME.accent,
+                    border: `1.5px solid ${THEME.accent}`,
+                    fontWeight: 700,
+                    padding: "7px 24px",
+                    borderRadius: 9,
+                    fontSize: "1.1em",
+                    boxShadow: "0 1px 10px #e1244455",
+                    display: "inline-flex",
+                    alignItems: "center"
+                  }}
+                  aria-live="assertive"
+                >
+                  🚨 {notification}
+                </div>
+              )}
+              {crimeAlerts.length > 0 && (
+                <div
+                  style={{
+                    position: "absolute",
+                    top: 101,
+                    left: "50%",
+                    transform: "translateX(-50%)",
+                    zIndex: 71,
+                    background: THEME.bg_warn,
+                    color: THEME.warn_red,
+                    border: `1.5px solid ${THEME.warn_red}`,
+                    fontWeight: 700,
+                    padding: "7px 18px",
+                    borderRadius: 8,
+                    fontSize: "1em",
+                    maxWidth: "95%",
+                    letterSpacing: ".01em",
+                    boxShadow: "0 1px 9px #db717155"
+                  }}
+                  aria-live="polite"
+                >
+                  <span style={{display:"inline-flex",alignItems:"center"}}>⚠️ {crimeAlerts[0]}</span>
+                </div>
+              )}
+              {wxAlert && (
+                <div
+                  style={{
+                    position: "absolute",
+                    top: 139,
+                    left: "50%",
+                    transform: "translateX(-50%)",
+                    zIndex: 71,
+                    background: "#E3EFFF",
+                    color: "#333a80",
+                    border: "1.5px solid #2196f3",
+                    fontWeight: 700,
+                    padding: "7px 16px",
+                    borderRadius: 8,
+                    fontSize: ".97em",
+                    maxWidth: "92%",
+                    letterSpacing: ".01em",
+                    boxShadow: "0 1px 8px #11327816"
+                  }}
+                  aria-live="polite"
+                >
+                  <span style={{display:"inline-flex",alignItems:"center"}}>⛈️ {wxAlert}</span>
                 </div>
               )}
               <div
@@ -956,7 +1156,17 @@ function App() {
             <div style={{ flex: 2, minWidth: 250, maxWidth: 350, paddingRight: 4, paddingLeft: 8 }}>
               {/* Weather preview */}
               {showWeather && <WeatherInfo weather={weather} />}
-              {/* ...rest of the sidebar (FeatureToggles, etc.) */}
+
+              {/* Overlay toggles */}
+              <OverlayToggles
+                showCrime={showCrime} setShowCrime={setShowCrime}
+                showLighting={showLighting} setShowLighting={setShowLighting}
+                showCrowds={showCrowds} setShowCrowds={setShowCrowds}
+                showWeather={showWeather} setShowWeather={setShowWeather}
+              />
+
+              {/* Map legend for overlays */}
+              <MapLegend />
             </div>
           </section>
         </div>
