@@ -2,8 +2,49 @@
 import React, { useState, useRef, useEffect } from "react";
 import "./App.css";
 
-// --- Global constant: Example polygons (mock crime zones) ---
-const CRIME_POLYGONS = [
+/**
+ * PUBLIC_INTERFACE
+ * Fetch live crime data from NYC Open Data API. Falls back to mock data on failure.
+ * Returns [{id, name, color, warning, path}]
+ */
+async function getLiveCrimePolygonsNYC(boundingBox) {
+  // boundingBox: {north, south, east, west}
+  const url = `https://data.cityofnewyork.us/resource/5uac-w243.json?$where=within_box(location,${boundingBox.north},${boundingBox.west},${boundingBox.south},${boundingBox.east})&$limit=200`;
+  // color is fixed for demo; in prod this could use severity/type/color-coding logic.
+  try {
+    const resp = await fetch(url);
+    const data = await resp.json();
+    if (!Array.isArray(data) || data.length === 0) throw new Error("No NYC crime data");
+    // Group points into small clusters (by type and proximity) as polygons (convex hull or simple circle for demo).
+    // For simplicity, treat each incident as a tiny polygon area to demo overlay.
+    return data.slice(0, 20).map((incident, idx) => {
+      const lat = parseFloat(incident.latitude || incident.location?.latitude);
+      const lng = parseFloat(incident.longitude || incident.location?.longitude);
+      // Create a 'circle' polygon for each incident — for real use, spatial clustering or precalculated shapes!
+      const d = 0.0009; // About 100m for visible demo
+      const polyCircle = [
+        { lat: lat + d, lng },
+        { lat: lat, lng: lng + d },
+        { lat: lat - d, lng },
+        { lat: lat, lng: lng - d },
+        { lat: lat + d, lng },
+      ];
+      return {
+        id: incident.cmplnt_num || idx,
+        name: incident.ofns_desc || "Crime incident",
+        color: "#e02451",
+        warning: `Recent incident: ${(incident.ofns_desc || "crime").toLowerCase()}`,
+        path: polyCircle,
+        incident,
+      };
+    });
+  } catch (err) {
+    return null; // Handled gracefully
+  }
+}
+
+// Static fallback: single high-crime zone
+const CRIME_POLYGONS_MOCK = [
   {
     name: "High-Crime Area",
     color: "#e02451",
@@ -339,6 +380,68 @@ function App() {
   const mapCanvasRef = useRef();
   const overlaysRef = useRef({}); // overlay objects, e.g., for cleanup
 
+  // -- LIVE CRIME DATA STATE --
+  const [crimePolygons, setCrimePolygons] = useState(CRIME_POLYGONS_MOCK);
+  const [crimeDataStatus, setCrimeDataStatus] = useState("loading"); // "loading" | "ready" | "error" | "fallback"
+
+  // Fetch live crime data on map move (~NYC region); fallback if fails.
+  useEffect(() => {
+    async function fetchCrimeZones(center, forceLoad = false) {
+      // Only fetch in/around NYC; put min-max bounds.
+      try {
+        setCrimeDataStatus("loading");
+        if (!showCrime) {
+          setCrimePolygons([]);
+          setCrimeDataStatus("ready");
+          return;
+        }
+        // Rough bounds for Manhattan
+        const c = center || { lat: 40.7445, lng: -73.9906 };
+        const bb = {
+          north: c.lat + 0.027,
+          south: c.lat - 0.027,
+          east: c.lng + 0.030,
+          west: c.lng - 0.032
+        };
+        const result = await getLiveCrimePolygonsNYC(bb);
+        if (!result || !Array.isArray(result) || result.length === 0) {
+          setCrimePolygons(CRIME_POLYGONS_MOCK);
+          setCrimeDataStatus("fallback");
+        } else {
+          setCrimePolygons(result);
+          setCrimeDataStatus("ready");
+        }
+      } catch {
+        setCrimePolygons(CRIME_POLYGONS_MOCK);
+        setCrimeDataStatus("fallback");
+      }
+    }
+    if (mapLoaded && showCrime && mapRef.current) {
+      // On map ready, fetch crime at visible center.
+      const map = mapRef.current;
+      const center = map.getCenter
+        ? { lat: map.getCenter().lat(), lng: map.getCenter().lng() }
+        : { lat: 40.7445, lng: -73.9906 };
+      fetchCrimeZones(center, false);
+      // Attach listener for region change to refetch overlays
+      if (!map._crimeListener) {
+        map._crimeListener = map.addListener("idle", () => {
+          const c = map.getCenter();
+          fetchCrimeZones({ lat: c.lat(), lng: c.lng() });
+        });
+      }
+    } else if (!showCrime) {
+      setCrimePolygons([]);
+      setCrimeDataStatus("ready");
+    }
+    // Cleanup
+    return () => {
+      if (mapRef.current && mapRef.current._crimeListener) {
+        window.google?.maps?.event?.removeListener(mapRef.current._crimeListener);
+        delete mapRef.current._crimeListener;
+      }
+    };
+  }, [mapLoaded, showCrime]);
   // (A) SETUP: Google Maps Loader & Initial Map Draw
   useEffect(() => {
     // set theme CSS variables just as before
@@ -575,15 +678,15 @@ function App() {
       })
     );
 
-    // 2. Draw crime zones
-    if (showCrime) {
-      overlaysRef.current.crimeZones = CRIME_POLYGONS.map((poly, idx) =>
+    // 2. Draw crime zones (live or fallback)
+    if (showCrime && Array.isArray(crimePolygons)) {
+      overlaysRef.current.crimeZones = crimePolygons.map((poly, idx) =>
         new window.google.maps.Polygon({
           paths: poly.path,
-          strokeColor: poly.color,
+          strokeColor: poly.color || "#e02451",
           strokeOpacity: 0.9,
           strokeWeight: 1,
-          fillColor: poly.color,
+          fillColor: poly.color || "#e02451",
           fillOpacity: 0.29,
           map,
           zIndex: 18,
@@ -643,10 +746,10 @@ function App() {
   // Route, crime, weather alert integration
   const [currentRouteIndex, setCurrentRouteIndex] = useState(0);
   const selectedRoute = DEMO_ROUTES[currentRouteIndex];
-  const crimeAlerts = CRIME_POLYGONS
+  const crimeAlerts = (crimePolygons || [])
     .map((poly) =>
       routeCrossesCrime(selectedRoute.points, poly)
-        ? `Route enters ${poly.name}: ${poly.warning}`
+        ? `Route enters ${poly.name || "crime zone"}${poly.warning ? `: ${poly.warning}` : ""}`
         : null
     )
     .filter(Boolean);
@@ -713,7 +816,46 @@ function App() {
                 background: "#f9f9fb"
               }}>
               {/* Map overlays and alerts */}
-              {/* ...REMAINDER OF UI/COMPONENT LAYOUT UNCHANGED... */}
+              {(crimeDataStatus === "loading") && (
+                <div style={{
+                  position: "absolute",
+                  top: 15,
+                  left: 0,
+                  right: 0,
+                  zIndex: 50,
+                  textAlign: "center",
+                  fontWeight: 600,
+                  color: "#E91E63",
+                  background: "rgba(255,255,255,0.90)",
+                  padding: "6px 0",
+                  borderRadius: 6,
+                  margin: "6px auto 0",
+                  width: "95%",
+                  fontSize: "1em"
+                }}>
+                  Loading live crime overlays...
+                </div>
+              )}
+              {(crimeDataStatus === "fallback") && (
+                <div style={{
+                  position: "absolute",
+                  top: 15,
+                  left: 0,
+                  right: 0,
+                  zIndex: 49,
+                  textAlign: "center",
+                  fontWeight: 600,
+                  color: "#A50B0B",
+                  background: "rgba(255,199,199,0.90)",
+                  padding: "5px 0",
+                  borderRadius: 6,
+                  margin: "7px auto 0",
+                  width: "93%",
+                  fontSize: ".98em"
+                }}>
+                  Live crime data unavailable. Displaying sample zones for demo.
+                </div>
+              )}
               <div
                 ref={mapCanvasRef}
                 tabIndex={0}
