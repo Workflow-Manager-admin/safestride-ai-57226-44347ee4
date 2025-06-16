@@ -49,7 +49,64 @@ const CRIME_POLYGONS = [
   },
 ];
 
-// PUBLIC_INTERFACE
+/**
+ * PUBLIC_INTERFACE
+ * Fetch real live weather using OpenWeatherMap API.
+ * @param {Object} center - { lat, lng }
+ * @returns Weather object: { temperature, weathercode, warning }
+ */
+async function getLiveWeatherOpenWeatherMap(center) {
+  // IMPORTANT: To enable live weather,
+  // Replace REPLACE_WITH_YOUR_OWM_API_KEY with your actual OpenWeatherMap API Key.
+  // For demo/dev: Get one free at https://openweathermap.org/appid
+  // Or expose as env variable/process.env.REACT_APP_OWM_KEY in production.
+  // If omitted, mock data will always be used.
+  const OPENWEATHERMAP_API_KEY = "REPLACE_WITH_YOUR_OWM_API_KEY";
+  if (OPENWEATHERMAP_API_KEY === "REPLACE_WITH_YOUR_OWM_API_KEY") {
+    // Do not attempt API call if not set
+    return { temperature: null, weathercode: null, warning: "Weather unavailable (API key not set)" };
+  }
+  if (!center || center.lat == null || center.lng == null) {
+    return { temperature: null, weathercode: null, warning: "Location unavailable" };
+  }
+  try {
+    const url = `https://api.openweathermap.org/data/2.5/weather?lat=${center.lat}&lon=${center.lng}&appid=${OPENWEATHERMAP_API_KEY}&units=metric`;
+    const resp = await fetch(url);
+    const data = await resp.json();
+    if (!data || !data.weather || !data.weather.length) throw new Error("No OWM weather");
+
+    // Map OWM weather codes to the project's scheme
+    const owmCode = data.weather[0].id;
+    let code = 1; // default clear
+    // Map as: thunderstorm codes: 2xx, drizzle: 3xx, rain: 5xx, snow: 6xx, fog: 7xx, clear: 800, clouds: 80x
+    if (owmCode >= 200 && owmCode < 300) code = 95;    // Thunderstorm
+    else if (owmCode >= 300 && owmCode < 400) code = 51; // Drizzle
+    else if (owmCode >= 500 && owmCode < 600) code = 61; // Rain
+    else if (owmCode >= 600 && owmCode < 700) code = 71; // Snow
+    else if (owmCode >= 700 && owmCode < 800) code = 45; // Fog/mist
+    else if (owmCode === 800) code = 1; // Clear
+    else if (owmCode > 800 && owmCode < 900) code = 3; // Clouds
+
+    // Create a human-friendly warning
+    let warning = null;
+    if ([51, 61].includes(code)) warning = "Drizzle/Rain 🌦️";
+    else if (code === 95) warning = "Thunderstorm ⛈️";
+    else if (code === 71) warning = "Snow/Sleet ❄️";
+    else if (code === 45) warning = "Fog/Mist 🌫️";
+    else if (code === 3) warning = "Cloudy";
+    else if (code === 1) warning = null;
+
+    return {
+      temperature: data.main.temp,
+      weathercode: code,
+      warning,
+      owm_raw: data
+    };
+  } catch (err) {
+    return { temperature: null, weathercode: null, warning: "Weather unavailable" };
+  }
+}
+// Legacy fallback: mock weather (maintain for error fallback only)
 function getMockWeather(center) {
   // Returns fake bad weather if center lng < -73.987 else good
   if (center && center.lng && center.lng < -73.987) {
@@ -404,24 +461,27 @@ function App() {
   // eslint-disable-next-line
   }, [geo, mapLoaded]);
 
-  // Weather effect (mock if fail)
+  // Weather effect (use OpenWeatherMap if enabled and API key present; fallback to mock for demo)
   useEffect(() => {
     async function fetchWeather() {
       if (!mapRef.current) return;
       const center = mapRef.current.getCenter();
       const lat = center.lat();
       const lng = center.lng();
-      // Try open-meteo, fall back to mock/weather
+
+      // === LIVE WEATHER via OpenWeatherMap ===
+      // Developer: Replace the API key variable in getLiveWeatherOpenWeatherMap.
+      let wxData = null;
       try {
-        const resp = await fetch(
-          `https://api.open-meteo.com/v1/forecast?latitude=${lat.toFixed(4)}&longitude=${lng.toFixed(4)}&current_weather=true`
-        );
-        const data = await resp.json();
-        if (data.current_weather) setWeather(data.current_weather);
-        else setWeather(getMockWeather({ lat, lng }));
+        wxData = await getLiveWeatherOpenWeatherMap({ lat, lng });
+        // If API not configured or fails, fallback:
+        if (wxData == null || wxData.temperature == null) {
+          wxData = getMockWeather({ lat, lng });
+        }
       } catch {
-        setWeather(getMockWeather({ lat, lng }));
+        wxData = getMockWeather({ lat, lng });
       }
+      setWeather(wxData);
     }
     if (showWeather && mapLoaded) fetchWeather();
     // eslint-disable-next-line
@@ -676,8 +736,11 @@ function App() {
     )
     .filter(Boolean);
   const wxAlert =
-    weather && weather.weathercode && [61, 63, 65, 80, 81, 82, 95, 96, 99].includes(weather.weathercode)
-      ? "Bad weather detected – suggest safe or covered route. ⚠️"
+    weather && (
+      // Project weather codes that indicate severe OR if direct warning string is present
+      ([61, 63, 65, 71, 80, 81, 82, 95, 96, 99, 45, 51].includes(weather.weathercode) || !!weather.warning)
+    )
+      ? `Weather Alert${weather.warning ? `: ${weather.warning}` : ""} – suggest safest or covered route. ⚠️`
       : null;
 
   return (
